@@ -1082,6 +1082,34 @@ public class IntegrationTests : IDisposable
         Assert.Equal(1, firstSync.TotalSecretsCreated);
     }
 
+    [Fact]
+    [Trait("Category", "BugReproduction")]
+    public async Task ExtractSecretDataAsync_WithProblematicValueInPasswordAndRenamedKey_ShouldPreserveFullValue()
+    {
+        // Arrange
+        var password = "my-user:$6$y1uLBjAqyd00NWZx$OwqB2xbnjygLbpE5xOFgV9gamn26ku8d9uomjkpIHZHzSSG.5dwnzZCEAtgfHUfodiAy6Zeer90Q5pZqAzw.A.";
+        var secretKeyName = "renamed-secret-key";
+        
+        var item = new VaultwardenItem
+        {
+            Id = "test-id-bug-rename",
+            Name = "problematic-secret",
+            Type = 1,
+            Login = new LoginInfo { Username = "user", Password = password }, // Password in main field
+            Fields = new List<FieldInfo>
+            {
+                new FieldInfo { Name = "secret-key", Value = secretKeyName, Type = 0 } // Renaming the key
+            }
+        };
+
+        // Act
+        var result = await ExtractSecretDataAsync(item);
+
+        // Assert
+        Assert.True(result.ContainsKey(secretKeyName), $"Result should contain key '{secretKeyName}'");
+        Assert.Equal(password, result[secretKeyName]);
+    }
+
     public void Dispose()
     {
         // Clean up lock file after each test
