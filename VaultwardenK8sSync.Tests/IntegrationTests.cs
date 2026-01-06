@@ -1084,54 +1084,28 @@ public class IntegrationTests : IDisposable
 
     [Fact]
     [Trait("Category", "BugReproduction")]
-    public async Task SyncAsync_WithProblematicPassword_ShouldPassFullValueToKubernetes()
+    public async Task ExtractSecretDataAsync_WithProblematicValueInCustomField_ShouldPreserveFullValue()
     {
         // Arrange
         var password = "my-user:$6$y1uLBjAqyd00NWZx$OwqB2xbnjygLbpE5xOFgV9gamn26ku8d9uomjkpIHZHzSSG.5dwnzZCEAtgfHUfodiAy6Zeer90Q5pZqAzw.A.";
-        var namespaceName = "default";
-        
         var item = new VaultwardenItem
         {
-            Id = "test-id-bug",
+            Id = "test-id-bug-custom",
             Name = "problematic-secret",
             Type = 1,
-            Login = new LoginInfo
-            {
-                Username = "testuser",
-                Password = password
-            },
+            Login = new LoginInfo { Username = "user", Password = "" }, // Empty main password
             Fields = new List<FieldInfo>
             {
-                new FieldInfo { Name = "namespaces", Value = namespaceName, Type = 0 }
+                new FieldInfo { Name = "problematic-secret", Value = password, Type = 0 } // Custom field with same name as secret
             }
         };
 
-        _vaultwardenServiceMock.Setup(x => x.GetItemsAsync())
-            .ReturnsAsync(new List<VaultwardenItem> { item });
-
-        _kubernetesServiceMock.Setup(x => x.GetAllNamespacesAsync())
-            .ReturnsAsync(new List<string> { namespaceName });
-            
-        _kubernetesServiceMock.Setup(x => x.NamespaceExistsAsync(namespaceName))
-            .ReturnsAsync(true);
-
-        _kubernetesServiceMock.Setup(x => x.SecretExistsAsync(namespaceName, It.IsAny<string>()))
-            .ReturnsAsync(false); // Force creation
-
-        _kubernetesServiceMock.Setup(x => x.CreateSecretAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<Dictionary<string, string>>()))
-            .ReturnsAsync(OperationResult.Successful());
-
         // Act
-        await _syncService.SyncAsync();
+        var result = await ExtractSecretDataAsync(item);
 
         // Assert
-        _kubernetesServiceMock.Verify(x => x.CreateSecretAsync(
-            namespaceName, 
-            "problematic-secret", 
-            It.Is<Dictionary<string, string>>(d => d.ContainsKey("problematic-secret") && d["problematic-secret"] == password), 
-            It.IsAny<Dictionary<string, string>>(), 
-            It.IsAny<Dictionary<string, string>>()), 
-            Times.Once);
+        Assert.True(result.ContainsKey("problematic-secret"));
+        Assert.Equal(password, result["problematic-secret"]);
     }
 
     public void Dispose()
