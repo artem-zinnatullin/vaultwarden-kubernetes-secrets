@@ -217,6 +217,32 @@ public class ComplexDataTests : IDisposable
         result["Test-Item"].Should().Be(password, "Environment variables should not be expanded");
     }
 
+    [Fact]
+    [Trait("Category", "SpecialCharacters")]
+    public async Task Password_WithCryptHashFormat_ShouldBePreserved()
+    {
+        // Arrange
+        var password = "my-user:$6$y1uLBjAqyd00NWZx$OwqB2xbnjygLbpE5xOFgV9gamn26ku8d9uomjkpIHZHzSSG.5dwnzZCEAtgfHUfodiAy6Zeer90Q5pZqAzw.A.";
+        var item = new VaultwardenItem
+        {
+            Id = "test-id",
+            Name = "Problematic Item",
+            Type = 1,
+            Login = new LoginInfo
+            {
+                Username = "testuser",
+                Password = password
+            }
+        };
+
+        // Act
+        var result = await ExtractSecretDataAsync(item);
+
+        // Assert
+        result.Should().ContainKey("Problematic-Item");
+        result["Problematic-Item"].Should().Be(password, "The full hash password should be preserved without truncation");
+    }
+
     #endregion
 
     #region Unicode and International Characters
