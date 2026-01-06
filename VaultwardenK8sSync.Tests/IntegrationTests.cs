@@ -1082,6 +1082,58 @@ public class IntegrationTests : IDisposable
         Assert.Equal(1, firstSync.TotalSecretsCreated);
     }
 
+    [Fact]
+    [Trait("Category", "BugReproduction")]
+    public async Task SyncAsync_WithProblematicPassword_ShouldPassFullValueToKubernetes()
+    {
+        // Arrange
+        var password = "my-user:$6$y1uLBjAqyd00NWZx$OwqB2xbnjygLbpE5xOFgV9gamn26ku8d9uomjkpIHZHzSSG.5dwnzZCEAtgfHUfodiAy6Zeer90Q5pZqAzw.A.";
+        var namespaceName = "default";
+        
+        var item = new VaultwardenItem
+        {
+            Id = "test-id-bug",
+            Name = "problematic-secret",
+            Type = 1,
+            Login = new LoginInfo
+            {
+                Username = "testuser",
+                Password = password
+            },
+            Fields = new List<FieldInfo>
+            {
+                new FieldInfo { Name = "namespaces", Value = namespaceName, Type = 0 }
+            }
+        };
+
+        _vaultwardenServiceMock.Setup(x => x.GetItemsAsync())
+            .ReturnsAsync(new List<VaultwardenItem> { item });
+
+        _kubernetesServiceMock.Setup(x => x.GetAllNamespacesAsync())
+            .ReturnsAsync(new List<string> { namespaceName });
+            
+        _kubernetesServiceMock.Setup(x => x.NamespaceExistsAsync(namespaceName))
+            .ReturnsAsync(true);
+
+        _kubernetesServiceMock.Setup(x => x.SecretExistsAsync(namespaceName, It.IsAny<string>()))
+            .ReturnsAsync(false); // Force creation
+
+        _kubernetesServiceMock.Setup(x => x.CreateSecretAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<Dictionary<string, string>>()))
+            .ReturnsAsync(OperationResult.Successful());
+
+        // Act
+        await _syncService.SyncAsync();
+
+        // Assert
+        _kubernetesServiceMock.Verify(x => x.CreateSecretAsync(
+            namespaceName, 
+            "problematic-secret", 
+            It.Is<Dictionary<string, string>>(d => d.ContainsKey("problematic-secret") && d["problematic-secret"] == password), 
+            It.IsAny<Dictionary<string, string>>(), 
+            It.IsAny<Dictionary<string, string>>()), 
+            Times.Once);
+    }
+
     public void Dispose()
     {
         // Clean up lock file after each test
