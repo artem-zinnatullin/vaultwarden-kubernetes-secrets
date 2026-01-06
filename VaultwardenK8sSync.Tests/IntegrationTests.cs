@@ -1084,19 +1084,21 @@ public class IntegrationTests : IDisposable
 
     [Fact]
     [Trait("Category", "BugReproduction")]
-    public async Task ExtractSecretDataAsync_WithProblematicValueInCustomField_ShouldPreserveFullValue()
+    public async Task ExtractSecretDataAsync_WithProblematicValueInPasswordAndRenamedKey_ShouldPreserveFullValue()
     {
         // Arrange
         var password = "my-user:$6$y1uLBjAqyd00NWZx$OwqB2xbnjygLbpE5xOFgV9gamn26ku8d9uomjkpIHZHzSSG.5dwnzZCEAtgfHUfodiAy6Zeer90Q5pZqAzw.A.";
+        var secretKeyName = "renamed-secret-key";
+        
         var item = new VaultwardenItem
         {
-            Id = "test-id-bug-custom",
+            Id = "test-id-bug-rename",
             Name = "problematic-secret",
             Type = 1,
-            Login = new LoginInfo { Username = "user", Password = "" }, // Empty main password
+            Login = new LoginInfo { Username = "user", Password = password }, // Password in main field
             Fields = new List<FieldInfo>
             {
-                new FieldInfo { Name = "problematic-secret", Value = password, Type = 0 } // Custom field with same name as secret
+                new FieldInfo { Name = "secret-key", Value = secretKeyName, Type = 0 } // Renaming the key
             }
         };
 
@@ -1104,8 +1106,8 @@ public class IntegrationTests : IDisposable
         var result = await ExtractSecretDataAsync(item);
 
         // Assert
-        Assert.True(result.ContainsKey("problematic-secret"));
-        Assert.Equal(password, result["problematic-secret"]);
+        Assert.True(result.ContainsKey(secretKeyName), $"Result should contain key '{secretKeyName}'");
+        Assert.Equal(password, result[secretKeyName]);
     }
 
     public void Dispose()
